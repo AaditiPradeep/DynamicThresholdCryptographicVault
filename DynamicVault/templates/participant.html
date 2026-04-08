@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vault Participant</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #0a0d16;
+            color: #cfd8ff;
+            font-family: 'IBM Plex Mono', monospace;
+            padding: 40px;
+        }
+
+        /* ---------- layout ---------- */
+        .container {
+            max-width: 550px;
+            margin: auto;
+            background: #101426;
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #1e2444;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+
+        .title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 32px;
+            letter-spacing: 3px;
+            margin-bottom: 20px;
+            color: #00ff9c; /* Green accent for nodes */
+        }
+
+        /* ---------- alerts ---------- */
+        #malice_alert { 
+            display: none; 
+            background: #ff1744; 
+            color: white; 
+            padding: 15px; 
+            margin-bottom: 20px; 
+            border-radius: 6px; 
+            text-align: center; 
+            font-weight: bold;
+            border: 1px solid #ff5252;
+            font-size: 13px;
+            animation: flicker 0.2s infinite secondary;
+        }
+
+        /* ---------- inputs & text ---------- */
+        label {
+            font-size: 12px;
+            color: #7c8db5;
+            margin-top: 15px;
+            display: block;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            background: #0c1022;
+            border: 1px solid #1e2444;
+            color: #cfd8ff;
+            border-radius: 6px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #00ff9c;
+        }
+
+        .readonly-data { 
+            background: #06080f; 
+            padding: 12px; 
+            border-radius: 6px; 
+            border: 1px solid #1e2444;
+            font-family: 'IBM Plex Mono', monospace; 
+            word-break: break-all; 
+            font-size: 11px;
+            margin-top: 5px;
+            color: #00e5ff;
+        }
+
+        /* ---------- buttons ---------- */
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            font-family: 'IBM Plex Mono', monospace;
+            transition: all .2s;
+            font-weight: 600;
+        }
+
+        .btn-connect {
+            background: #00ff9c;
+            color: #0a0d16;
+        }
+
+        .btn-connect:hover {
+            background: #00c87a;
+        }
+
+        /* ---------- sections ---------- */
+        .tamper-box { 
+            background: #1a1016; 
+            border: 1px dashed #ff1744; 
+            padding: 15px; 
+            margin-top: 25px; 
+            border-radius: 6px; 
+        }
+
+        .status-msg {
+            font-size: 11px;
+            margin-top: 15px;
+            color: #7c8db5;
+            text-align: center;
+            font-style: italic;
+        }
+
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div id="malice_alert">🚨 MALICIOUS DEALER DETECTED!</div>
+        
+        <div class="title">NODE PARTICIPANT</div>
+
+        <div id="setup_section">
+            <label>Enter Participant ID (PID)</label>
+            <input type="number" id="pid_val" placeholder="Ex: 1, 2, 3...">
+            <button class="btn-connect" onclick="register()">Connect to Network</button>
+        </div>
+
+        <div id="share_section" style="display: none;">
+            <label>Secret Share</label>
+            <div class="readonly-data" id="display_s">Awaiting transmission...</div>
+            <label>Randomness Share</label>
+            <div class="readonly-data" id="display_r">Awaiting transmission...</div>
+
+            <div class="tamper-box">
+                <label style="color:#ff1744; margin-top:0;">⚠️ Attack Simulator</label>
+                <p style="font-size:10px; color:#7c8db5; margin-bottom:10px;">
+                    Edit the value below to test vault error detection.
+                </p>
+                <input type="text" id="submit_s" placeholder="Awaiting share...">
+            </div>
+
+            <div id="status_msg" class="status-msg">System: Standby</div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let myPid = null; 
+        let myRi = null;
+
+        function register() {
+            myPid = document.getElementById('pid_val').value;
+            if(!myPid) return alert("Enter a valid PID.");
+            
+            socket.emit('register_participant', { pid: myPid });
+            
+            document.getElementById('setup_section').style.display = 'none';
+            document.getElementById('share_section').style.display = 'block';
+        }
+
+        // --- Malicious Dealer Detection ---
+        socket.on('dealer_malicious_alert', data => {
+            const banner = document.getElementById('malice_alert');
+            banner.style.display = 'block';
+            banner.innerText = `🚨 DEALER CHEATING: P${data.target_pid} corrupted!`;
+            alert("VSS CRITICAL: Inconsistent cryptographic data detected from Dealer.");
+        });
+
+        // --- Receiving Shares ---
+        socket.on('receive_private_share', data => {
+            document.getElementById('malice_alert').style.display = 'none';
+            document.getElementById('display_s').innerText = data.s_i;
+            document.getElementById('display_r').innerText = data.r_i;
+            document.getElementById('submit_s').value = data.s_i;
+            document.getElementById('status_msg').innerText = "System: Share Locked.";
+            myRi = data.r_i;
+        });
+
+        // --- Auto-trigger for Reconstruction ---
+        socket.on('request_your_share', () => {
+            if (myRi) {
+                socket.emit('submit_for_reconstruction', {
+                    pid: myPid, 
+                    s_i: document.getElementById('submit_s').value, 
+                    r_i: myRi
+                });
+                document.getElementById('status_msg').innerText = "System: Share dispatched to Vault.";
+            }
+        });
+    </script>
+
+</body>
+</html>
+</body>
+</html>

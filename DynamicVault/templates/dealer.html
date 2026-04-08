@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Vault Dealer</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+
+<style>
+
+*{
+box-sizing:border-box;
+margin:0;
+padding:0;
+}
+
+body{
+background:#0a0d16;
+color:#cfd8ff;
+font-family:'IBM Plex Mono',monospace;
+padding:40px;
+}
+
+/* ---------- layout ---------- */
+
+.container{
+max-width:700px;
+margin:auto;
+background:#101426;
+padding:30px;
+border-radius:12px;
+border:1px solid #1e2444;
+box-shadow:0 0 30px rgba(0,0,0,0.5);
+}
+
+.title{
+font-family:'Bebas Neue',sans-serif;
+font-size:32px;
+letter-spacing:3px;
+margin-bottom:20px;
+color:#00e5ff;
+}
+
+/* ---------- inputs ---------- */
+
+label{
+font-size:12px;
+color:#7c8db5;
+margin-top:15px;
+display:block;
+}
+
+input{
+width:100%;
+padding:10px;
+margin-top:5px;
+background:#0c1022;
+border:1px solid #1e2444;
+color:#cfd8ff;
+border-radius:6px;
+}
+
+input:focus{
+outline:none;
+border-color:#00e5ff;
+}
+
+/* ---------- buttons ---------- */
+
+button{
+width:100%;
+padding:12px;
+margin-top:12px;
+border:none;
+border-radius:6px;
+font-size:14px;
+cursor:pointer;
+font-family:'IBM Plex Mono',monospace;
+transition:all .2s;
+}
+
+.btn-dist{
+background:#007bff;
+color:white;
+}
+
+.btn-dist:hover{
+background:#1d8dff;
+}
+
+.btn-malicious{
+background:#ff1744;
+color:white;
+}
+
+.btn-malicious:hover{
+background:#ff3d63;
+}
+
+.btn-collect{
+background:#00c853;
+color:white;
+}
+
+.btn-collect:hover{
+background:#24e273;
+}
+
+.btn-adjust{
+background:#ff9800;
+color:black;
+}
+
+.btn-adjust:hover{
+background:#ffb74d;
+}
+
+/* ---------- sections ---------- */
+
+.section{
+margin-top:25px;
+padding-top:20px;
+border-top:1px solid #1e2444;
+}
+
+/* ---------- logs ---------- */
+
+#event_logs{
+margin-top:10px;
+background:#06080f;
+border:1px solid #1e2444;
+padding:15px;
+height:260px;
+overflow-y:auto;
+border-radius:6px;
+list-style:none;
+font-size:12px;
+color:#00ff9c;
+}
+
+#event_logs li{
+padding:2px 0;
+}
+
+</style>
+</head>
+
+
+<body>
+
+<div class="container">
+
+<div class="title">VAULT DEALER PANEL</div>
+
+<label>Secret File</label>
+<input type="file" id="file_val">
+
+<label>Total Participants (n)</label>
+<input type="number" id="n_val" value="3" min="2">
+
+<label>Initial Threshold (t)</label>
+<input type="number" id="t_val" value="1" min="1">
+
+<button class="btn-dist" onclick="startVSS()">
+Generate & Distribute Shares
+</button>
+
+<button class="btn-malicious" onclick="startMaliciousVSS()">
+⚠ Malicious Generate (Corrupt P1)
+</button>
+
+<button class="btn-collect" onclick="collect()">
+Pull Shares & Reconstruct
+</button>
+
+
+<div class="section">
+
+<h3>Dynamic Threshold Adjustment</h3>
+
+<label>New Threshold (t')</label>
+<input type="number" id="new_threshold" min="1">
+
+<button class="btn-adjust" onclick="adjustThreshold()">
+Adjust Vault Threshold
+</button>
+
+</div>
+
+
+<div class="section">
+
+<h3>Vault Activity Logs</h3>
+
+<ul id="event_logs"></ul>
+
+</div>
+
+</div>
+
+
+<script>
+
+const socket = io();
+
+/* -----------------------------
+   START VSS PROTOCOL
+------------------------------*/
+function startVSS() {
+
+const fileInput = document.getElementById('file_val');
+
+if(fileInput.files.length === 0){
+alert("Please select a file.");
+return;
+}
+
+const reader = new FileReader();
+
+reader.onload = (e)=>{
+
+socket.emit('start_protocol',{
+
+file_bytes:e.target.result,
+n:document.getElementById('n_val').value,
+threshold:document.getElementById('t_val').value
+
+});
+
+};
+
+reader.readAsArrayBuffer(fileInput.files[0]);
+}
+
+
+/* -----------------------------
+   MALICIOUS TEST
+------------------------------*/
+
+function startMaliciousVSS(){
+
+const fileInput=document.getElementById('file_val');
+
+if(fileInput.files.length===0){
+alert("Select a file.");
+return;
+}
+
+const reader=new FileReader();
+
+reader.onload=(e)=>{
+
+socket.emit('start_malicious_protocol',{
+
+file_bytes:e.target.result,
+n:document.getElementById('n_val').value,
+threshold:document.getElementById('t_val').value
+
+});
+
+};
+
+reader.readAsArrayBuffer(fileInput.files[0]);
+
+}
+
+
+/* -----------------------------
+   COLLECT SHARES
+------------------------------*/
+
+function collect(){
+
+socket.emit('request_shares_from_all');
+
+}
+
+
+/* -----------------------------
+   DYNAMIC THRESHOLD UPDATE
+------------------------------*/
+
+function adjustThreshold(){
+
+const newT=document.getElementById('new_threshold').value;
+
+if(!newT){
+alert("Enter a threshold value.");
+return;
+}
+
+socket.emit('adjust_threshold',{threshold:newT});
+
+}
+
+
+/* -----------------------------
+   LOGS
+------------------------------*/
+
+socket.on('logs',data=>{
+
+const logBox=document.getElementById('event_logs');
+
+const li=document.createElement('li');
+
+li.innerText=`> ${data.msg}`;
+
+logBox.appendChild(li);
+
+logBox.scrollTop=logBox.scrollHeight;
+
+});
+
+</script>
+
+</body>
+</html>
